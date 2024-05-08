@@ -9,6 +9,15 @@ import System.Random
 window :: Display
 window = InWindow "Simon!!" (800, 800) (100, 100)
 
+
+-- Play is a function that takes a number of inputs
+-- window -> the space the game is played in
+-- Backgrond -> the backround color
+-- fps -> The number of processes needed for a second to pass
+-- initialState -> the initial state of the game world
+-- renderState -> Contols how we see the world
+-- handleInput -> Controls how we handle input
+-- updateState -> Happens every program cycle
 main :: IO ()
 main = do
     gen <- newStdGen
@@ -70,6 +79,7 @@ showStates s = case active s of
         Just Red -> (buttonsToPicture passiveButtons {buttonRed = activeRed $ arcRed})
         Nothing -> (buttonsToPicture passiveButtons)
 
+-- 
 buttonsToPicture :: Buttons -> Picture
 buttonsToPicture bp = pictures [ 
                                 buttonYellow bp,
@@ -78,7 +88,7 @@ buttonsToPicture bp = pictures [
                                 buttonRed bp
                                 ]
 
-
+-- Changes the center display based on the current game state
 displayScore :: State -> Picture
 displayScore s = case status s of
                  Loss -> scale 0.2 0.2 $ translate (-310) (-35) $ color black $ text $ "Try Again"
@@ -97,16 +107,6 @@ renderState s = pictures [ showStates s,
 --
 -- Everything needed to process the game and load states
 
--- Every game state needs all of these things
--- active           -> The current display state, if a button is active
--- A timer          -> The current time between color displays
--- A status         -> What is currently happening
--- colors           -> The current color sequence
--- sequence         -> The length of the current sequence
--- mousePosition    -> Where the mouse currently is
-
-
-
 -- All of the different colors
 data ButtonColor = Yellow
                  | Green
@@ -121,6 +121,14 @@ data Status =   InProgress
                 | Loss
   deriving (Show, Eq)
 
+
+-- Every game state needs all of these things
+-- active           -> The current display state, if a button is active
+-- A timer          -> The current time between color displays
+-- A status         -> What is currently happening
+-- colors           -> The current color sequence
+-- sequence         -> The length of the current sequence
+-- mousePosition    -> Where the mouse currently is
 data State = State
   { active :: Maybe ButtonColor,
     time :: Int,
@@ -147,18 +155,18 @@ initialState = State
 -- Changing game states, recording player input, and recording the games progress (adding to the list)
 
 updateState :: Float -> State -> State
-updateState _ s   | time s {time = (time s) - 1} <= 0 = nextState s
-                  | otherwise = s {time = (time s) - 1}
+updateState _ s   | time s {time = (time s) - 1} <= 0   = nextState s
+                  | otherwise                           = s {time = (time s) - 1}
 
 nextState :: State -> State
-nextState s   | status s == InProgress = playColors s     -- If we need to give the user the color list
-              | status s == TakingInput = recieveColors s -- if we need to recieve the color list
-              | otherwise = s
+nextState s   | status s == InProgress    = playColors s      -- If we need to give the user the color list
+              | status s == TakingInput   = recieveColors s   -- if we need to recieve the color list
+              | otherwise                 = s                 -- If we win or lose there is no state to advance
 
 playColors :: State -> State
 playColors s  | active s /= Nothing             = setActive Nothing 30 s                                        -- there is no color to display
-              | currentPos s < sequenceLength s = currentIncrement $ setActive (Just $ getActive s) 30 s -- display the next color in the sequence
-              | otherwise                       = changeToTakingInput $ currentReset $ setActive Nothing 300 s   -- we have finished displaying the colors, change the state and begin to take input
+              | currentPos s < sequenceLength s = currentIncrement $ setActive (Just $ getActive s) 30 s        -- display the next color in the sequence
+              | otherwise                       = changeToTakingInput $ currentReset $ setActive Nothing 300 s  -- we have finished displaying the colors, change the state and begin to take input
 
 
 
@@ -239,6 +247,4 @@ isValidColor s = active s == (Just $ getActive s)
   
 -- Retrieves the active color 
 getActive :: State -> ButtonColor
-getActive gs = (colors gs) !! (currentPos gs)
-
-
+getActive s = (colors s) !! (currentPos s)
