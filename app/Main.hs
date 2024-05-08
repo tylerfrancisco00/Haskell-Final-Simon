@@ -21,8 +21,7 @@ window = InWindow "Simon!!" (800, 800) (100, 100)
 main :: IO ()
 main = do
     gen <- newStdGen
-    let rndColorSeq  = genColorSeq gen 5
-    play window background 60 initialState {colors = rndColorSeq} renderState handleInput updateState
+    play window background 60 initialState {colors = makeColorArr gen 5} renderState handleInput updateState
 
 --
 --      VISUALS
@@ -31,7 +30,6 @@ main = do
 -- For building the GUI
 -- each arc comes with 2 sets of degrees, a radius, and a thickness
 -- each color comes with an RGBA value
-
 
 background = makeColorI 170 170 170 255
 
@@ -79,28 +77,21 @@ showStates s = case active s of
         Just Red -> (buttonsToPicture passiveButtons {buttonRed = activeRed $ arcRed})
         Nothing -> (buttonsToPicture passiveButtons)
 
--- 
+-- Turns all of our buttons into a valid picture
 buttonsToPicture :: Buttons -> Picture
-buttonsToPicture bp = pictures [ 
-                                buttonYellow bp,
-                                buttonGreen bp,
-                                buttonBlue bp,
-                                buttonRed bp
-                                ]
+buttonsToPicture bp = pictures [ buttonYellow bp, buttonGreen bp, buttonBlue bp, buttonRed bp ]
 
 -- Changes the center display based on the current game state
 displayScore :: State -> Picture
 displayScore s = case status s of
-                 Loss -> scale 0.2 0.2 $ translate (-310) (-35) $ color black $ text $ "Try Again"
-                 Win -> scale 0.2 0.2 $ translate (-310) (-35) $ color black $ text $ "You Won!"
+                 Loss -> scale 0.2 0.2 $ translate (-310) (-35) $ color black $ text $ "Failed!"
+                 Win -> scale 0.2 0.2 $ translate (-310) (-35) $ color black $ text $ "Congrats!!"
                  _        -> scale 0.3 0.3 $ translate (-35) (-45) $ color black $ text $ show (sequenceLength s - 1)
 
 
 -- turns a state into an image
 renderState :: State -> Picture
-renderState s = pictures [ showStates s,
-                            displayScore s
-                           ]
+renderState s = pictures [showStates s, displayScore s]
 
 --
 --      GAME STATES
@@ -108,17 +99,11 @@ renderState s = pictures [ showStates s,
 -- Everything needed to process the game and load states
 
 -- All of the different colors
-data ButtonColor = Yellow
-                 | Green
-                 | Blue
-                 | Red
+data ButtonColor = Yellow | Green | Blue | Red
   deriving (Show, Eq)
 
 -- All of the different game status 
-data Status =   InProgress
-                | TakingInput
-                | Win
-                | Loss
+data Status =   InProgress | TakingInput | Win | Loss
   deriving (Show, Eq)
 
 
@@ -130,10 +115,10 @@ data Status =   InProgress
 -- sequence         -> The length of the current sequence
 -- mousePosition    -> Where the mouse currently is
 data State = State
-  { active :: Maybe ButtonColor,
+  { colors :: [ButtonColor],
+    active :: Maybe ButtonColor,
     time :: Int,
     status :: Status,
-    colors :: [ButtonColor],
     sequenceLength :: Int,
     currentPos :: Int } deriving Show
 
@@ -141,10 +126,10 @@ data State = State
 -- The initial load state of a game, every game starts here
 initialState :: State
 initialState = State
-  { active = Nothing,
+  { colors = [],
+    active = Nothing,
     time = 100,
     status = InProgress,
-    colors = [],
     sequenceLength = 1,
     currentPos = 0
   }
@@ -171,7 +156,7 @@ playColors s  | active s /= Nothing             = setActive Nothing 30 s        
 
 
 recieveColors :: State -> State
-recieveColors s | isValidColor s = if (currentPos s + 1 < sequenceLength s) -- check to make sure we have recieved a valid color
+recieveColors s | isCorrect s    = if (currentPos s + 1 < sequenceLength s) -- check to make sure we have recieved a valid color
                                       then currentIncrement $ setActive Nothing 300 s -- is the currentPos is still less than the sequence length, increment and change the color
                                       else incrementSequencePosition $ changeToInProgress $ currentReset $ setActive Nothing 30 s -- if we have gone through all of the colors reset the state
                 | otherwise      = changeToLoss s
@@ -181,19 +166,18 @@ recieveColors s | isValidColor s = if (currentPos s + 1 < sequenceLength s) -- c
 handleInput :: Event -> State -> State
 handleInput (EventKey (MouseButton LeftButton) Up _ mousePos) s = case status s of
                                                                     TakingInput -> setActive (Just color) 30 s -- if we are taking input, change the color
-                                                                    Loss  -> initialState {colors = genColorSeq (mkStdGen $ sequenceLength s) 5} -- if we are under a loss reset the game
+                                                                    Loss  -> initialState {colors = makeColorArr (mkStdGen $ sequenceLength s) 5} -- if we are under a loss reset the game
                                                                     _         -> s -- if neither just return the state
   where
     color   = mouseToColor mousePos
 handleInput _                                                 s = s
 
+
 --
 --      HELPER FUNCTIONS FOR LOGIC
 --
 
--- A Converter from integers to button colors
-
--- changes the mouse position to a color    (DONE)
+-- changes the mouse position to a color
 mouseToColor :: (Float, Float) -> ButtonColor
 mouseToColor (x, y) | x < 0 && y < 0 = Yellow
                     | x > 0 && y < 0 = Green
@@ -208,8 +192,8 @@ integerToColor n  | n == 1 = Yellow
                   | n == 4 = Blue
 
 -- A function to generate a color sequence
-genColorSeq :: StdGen -> Int -> [ButtonColor]
-genColorSeq generator length = map integerToColor (take length $ randomRs (1,4) generator)
+makeColorArr :: StdGen -> Int -> [ButtonColor]
+makeColorArr generator length = map integerToColor (take length $ randomRs (1,4) generator)
 
 -- increments the length of sequence or ends the game if the sequence is greater than 10
 incrementSequencePosition :: State -> State
@@ -233,17 +217,17 @@ changeToWin s = s {status = Win, active = Nothing}
 changeToLoss :: State -> State
 changeToLoss s = s {status = Loss, active = Nothing}
 
--- setting the active color 
+-- setting the active color and how long to display it
 setActive :: Maybe ButtonColor -> Int -> State -> State
 setActive color time s = s {active = color, time = time}
 
--- resets the mouse position
+-- resets the current postition in the color []
 currentReset :: State -> State
 currentReset s = s {currentPos = 0}
 
--- Checks if the color entered is valid 
-isValidColor :: State -> Bool
-isValidColor s = active s == (Just $ getActive s)
+-- Checks if the color entered is valid (correct)
+isCorrect :: State -> Bool
+isCorrect s = active s == (Just $ getActive s)
   
 -- Retrieves the active color 
 getActive :: State -> ButtonColor
